@@ -4,10 +4,13 @@
 # RSS
 # feeds.py が存在しない場合はサンプルにフォールバック
 try:
-    from feeds import FEED_URLS, LIMIT  # 実際のフィード一覧（非公開）
+    from feeds import FEED_URLS, LIMIT, CATEGORIES  # 実際のフィード一覧（非公開）
 except ImportError:
-    from feeds_sample import FEED_URLS, LIMIT  # サンプルで代替
+    from feeds_sample import FEED_URLS, LIMIT, CATEGORIES  # サンプルで代替
     print("[警告] feeds.py が見つかりません。feeds_sample.py で動作しています。")
+
+DAYS = 7 # 一週間分の記事
+OUTPUT_DIR = "output" # ようやくファイル出力先ディレクトリ
 
 # A: Ollama
 BASE_URL = "http://localhost:11434/v1" # Ollama の OpenAI 互換エンドポイント
@@ -19,3 +22,4 @@ MODEL = "qwen2.5-coder:7b"
 # BASE_URL = "http://localhost:1234/v1" # LM Studio サーバのデフォルト
 # API_KEY = "hoge" # ローカルはダミーで OK
 # MODEL = "" # LM Studio で読み込んだモデルの ID
+

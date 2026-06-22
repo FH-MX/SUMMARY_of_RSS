@@ -47,27 +47,26 @@ def summarize(client, text):
     )
     return response.choices[0].message.content
 
-def summarize_all(client, articles, days):
-    # 全記事をまとめて1つに要約する
+def summarize_all(client, articles, days, category=""):
+    # 指定カテゴリの記事をまとめて1つに要約する
     if not articles:
         return "記事が収集できませんでした。"
 
-    # 各記事を「タイトル + RSS本文200文字」に整形してまとめる
-    # （ローカルLLMのコンテキスト制限対策）
     lines = []
     for i, a in enumerate(articles, start=1):
-        short_summary = a["summary"][:200].replace("\n", " ")  # 200文字に切り詰め
+        short_summary = a["summary"][:200].replace("\n", " ")  # コンテキスト制限対策
         lines.append(f"{i}. 【{a['title']}】{short_summary}")
 
     combined_text = "\n".join(lines)
+    category_label = f"「{category}」" if category else ""
 
     response = client.chat.completions.create(
         model=config.MODEL,
         messages=[
             {"role": "system", "content": "あなたは優秀な編集者です。日本語で簡潔にまとめます。"},
             {"role": "user", "content": (
-                f"以下は過去{days}日分のRSS記事{len(articles)}件です。\n"
-                "主要トピックをカテゴリ別にまとめた日報として日本語で要約してください。\n\n"
+                f"以下は過去{days}日分{category_label}のRSS記事{len(articles)}件です。\n"
+                "注目記事を3〜5件ピックアップして「タイトル：〇〇 / 要点：〇〇」の形式でまとめてください。\n\n"
                 f"{combined_text}"
             )},
         ],
@@ -75,31 +74,36 @@ def summarize_all(client, articles, days):
     )
     return response.choices[0].message.content
 
-# 変更後
 def main():
     client = make_client()
-    all_articles = []  # 全フィードの記事をここにまとめる
+    today = datetime.date.today().isoformat()
+    results = {}  # {category: summary}
+    counts = {}   # {category: 件数}
 
-    # 全フィードから記事を収集
-    for feed_url in config.FEED_URLS:
-        print(f"取得中: {feed_url}")
-        articles = fetch_articles(feed_url, config.LIMIT, config.DAYS)
-        all_articles.extend(articles)
+    # カテゴリごとに記事を収集して要約
+    for category, urls in config.CATEGORIES.items():
+        articles = []
+        for feed_url in urls:
+            print(f"取得中 [{category}]: {feed_url}")
+            articles.extend(fetch_articles(feed_url, config.LIMIT, config.DAYS))
 
-    print(f"\n収集記事数: {len(all_articles)} 件（過去{config.DAYS}日分）")
+        counts[category] = len(articles)
+        print(f"  → {len(articles)}件")
 
-    if not all_articles:
-        print("記事が見つかりませんでした。")
-        return
+        if not articles:
+            results[category] = "記事が見つかりませんでした。"
+            continue
 
-    # LLMで全体まとめを生成
-    print("\nまとめを生成中...")
-    summary = summarize_all(client, all_articles, config.DAYS)
+        print(f"まとめを生成中: {category}...")
+        results[category] = summarize_all(client, articles, config.DAYS, category)
+
+    total = sum(counts.values())
+    print(f"\n収集記事数合計: {total}件（過去{config.DAYS}日分）")
 
     # ターミナルに表示
-    today = datetime.date.today().isoformat()
-    print(f"\n========== RSS まとめ ({today}) ==========")
-    print(summary)
+    for category, summary in results.items():
+        print(f"\n========== {category}（{counts[category]}件） ==========")
+        print(summary)
 
     # Markdownファイルに保存
     os.makedirs(config.OUTPUT_DIR, exist_ok=True)
@@ -107,9 +111,10 @@ def main():
     with open(output_path, "w", encoding="utf-8") as f:
         now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         f.write(f"# RSS まとめ ({today})\n\n")
-        f.write(f"期間: 過去{config.DAYS}日 / 収集記事数: {len(all_articles)}件\n\n")
-        f.write("## 全体まとめ\n\n")
-        f.write(summary + "\n\n")
+        f.write(f"期間: 過去{config.DAYS}日 / 収集記事数: {total}件\n\n")
+        for category, summary in results.items():
+            f.write(f"## {category}（{counts[category]}件）\n\n")
+            f.write(summary + "\n\n")
         f.write("---\n")
         f.write(f"*生成日時: {now_str}*\n")
 
