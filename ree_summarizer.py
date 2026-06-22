@@ -1,7 +1,6 @@
 # rss_summarizer.py
 # RSS ニュースを取得して、ローカル LLM（Ollama / LM Studio）で要約するツール。
 
-import sys
 import feedparser
 from openai import OpenAI
 
@@ -42,15 +41,17 @@ def summarize(client, text):
 def main():
     # プログラムの入り口。全体の流れをここで組み立てる
     client = make_client() # 1) LLM クライアントを用意
-    articles = fetch_articles(config.FEED_URL, config.LIMIT) # RSS から記事を取得
-    if not articles:
-        print("記事が取得できませんでした。FEED_URL を確認してください。")
-        sys.exit(1)
-    for i, article in enumerate(articles, start=1):
-        print(f"\n[{i}] {article['title']}")
-        print(f" URL: {article['link']}")
-        result = summarize(client, article["summary"])
-        print(f" 要約: {result}") 
+    for feed_url in config.FEED_URLS: # フィードを1つずつ処理
+        print(f"\n=== フィード: {feed_url} ===")
+        articles = fetch_articles(feed_url, config.LIMIT) # RSS から記事を取得
+        if not articles:
+            print("記事が取得できませんでした。スキップします。")
+            continue
+        for i, article in enumerate(articles, start=1):
+            print(f"\n[{i}] {article['title']}")
+            print(f" URL: {article['link']}")
+            result = summarize(client, article["summary"])
+            print(f" 要約: {result}")
 
 if __name__ == "__main__": 
     main() 
